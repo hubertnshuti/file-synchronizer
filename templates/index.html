@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>File Transfer</title>
+<link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">📁 File Transfer</div>
+  <button id="nameBtn" class="pill" title="Tap to rename this device"></button>
+</header>
+
+<main>
+  <section id="dropZone" class="drop-zone">
+    <div class="drop-icon">📤</div>
+    <h1>Send Files</h1>
+    <p class="hint">Tap to choose, or drag files here</p>
+    <button id="pickBtn" class="big-btn">Choose files</button>
+    <input id="fileInput" type="file" multiple hidden>
+  </section>
+
+  <section class="devices-section">
+    <h2>Devices on this network</h2>
+    <div id="deviceList" class="device-list">
+      <p class="muted" id="noDevices">Looking for other devices…</p>
+    </div>
+  </section>
+</main>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="/static/js/app.js"></script>
+</body>
+</html>
