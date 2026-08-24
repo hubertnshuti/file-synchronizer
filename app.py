@@ -1,16 +1,22 @@
 import io
 import os
+import re
 import socket
 import threading
 import time
+import uuid
 
 import qrcode
-from flask import Flask, jsonify, request, render_template, send_file
+from flask import Flask, jsonify, request, render_template, send_from_directory, send_file
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
 PORT = 5000
 
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024 * 1024  # 20 GB safety cap
 
 devices = {}   # id -> {name, type, last_seen}
 
@@ -32,6 +38,12 @@ def get_lan_ip():
 
 LAN_IP = get_lan_ip()
 SERVER_URL = f"http://{LAN_IP}:{PORT}"
+
+
+def safe_filename(name):
+    name = os.path.basename(name)
+    name = re.sub(r"[^A-Za-z0-9 ._\-()]+", "_", name)
+    return name or "file"
 
 
 @app.route("/")
@@ -72,6 +84,22 @@ def list_devices():
             if now - v["last_seen"] <= DEVICE_TIMEOUT and d != my_id
         ]
     return jsonify(online)
+
+
+@app.route("/upload", methods=["POST"])
+def upload():
+    files = request.files.getlist("files")
+    if not files:
+        return jsonify({"error": "no files"}), 400
+    transfer_id = uuid.uuid4().hex
+    dest = os.path.join(UPLOAD_DIR, transfer_id)
+    os.makedirs(dest, exist_ok=True)
+    saved = []
+    for f in files:
+        name = safe_filename(f.filename)
+        f.save(os.path.join(dest, name))
+        saved.append({"name": name, "size": os.path.getsize(os.path.join(dest, name))})
+    return jsonify({"transfer_id": transfer_id, "files": saved})
 
 
 if __name__ == "__main__":
