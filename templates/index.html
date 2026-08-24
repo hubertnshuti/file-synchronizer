@@ -27,8 +27,34 @@
     <div id="deviceList" class="device-list">
       <p class="muted" id="noDevices">Looking for other devices…</p>
     </div>
+    <button id="connectBtn" class="link-btn">📱 Connect another device (show QR)</button>
+  </section>
+
+  <section id="transferPanel" class="transfer-panel hidden">
+    <h2 id="transferTitle">Sending…</h2>
+    <div class="progress-outer"><div id="progressBar" class="progress-inner"></div></div>
+    <p id="transferStatus" class="muted"></p>
   </section>
 </main>
+
+<!-- Device chooser modal -->
+<div id="chooserModal" class="modal hidden">
+  <div class="modal-card">
+    <h2>Send to which device?</h2>
+    <div id="chooserList" class="device-list"></div>
+    <button class="text-btn" data-close="chooserModal">Cancel</button>
+  </div>
+</div>
+
+<!-- QR modal -->
+<div id="qrModal" class="modal hidden">
+  <div class="modal-card">
+    <h2>Scan with your other device</h2>
+    <img src="/qr.png" alt="QR code" class="qr-img">
+    <p class="muted">{{ server_url }}</p>
+    <button class="text-btn" data-close="qrModal">Close</button>
+  </div>
+</div>
 
 <div id="toast" class="toast hidden"></div>
 
