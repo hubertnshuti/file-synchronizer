@@ -190,12 +190,60 @@
         return;
       }
       var res = JSON.parse(xhr.responseText);
-      progressBar.style.width = "100%";
-      transferTitle.textContent = "Uploaded ✓";
-      transferStatus.textContent = "Sent to " + targetDevice.name + ".";
+      createOffer(res, targetDevice);
     };
     xhr.onerror = function () { transferStatus.textContent = "Upload failed. Check connection."; };
     xhr.send(form);
+  }
+
+  function createOffer(uploadRes, targetDevice) {
+    transferStatus.textContent = "Waiting for " + targetDevice.name + " to accept…";
+    fetch("/api/offer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        transfer_id: uploadRes.transfer_id,
+        to_id: targetDevice.id,
+        from_id: myId,
+        from_name: myName,
+        files: uploadRes.files,
+      }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (res) { watchOfferStatus(res.offer_id, targetDevice); })
+      .catch(function () { transferStatus.textContent = "Could not reach " + targetDevice.name + "."; });
+  }
+
+  function watchOfferStatus(offerId, targetDevice) {
+    var tries = 0;
+    var iv = setInterval(function () {
+      tries++;
+      fetch("/api/offer/" + offerId + "/status")
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (res.status === "accepted") {
+            transferStatus.textContent = targetDevice.name + " is downloading…";
+          } else if (res.status === "rejected") {
+            clearInterval(iv);
+            progressBar.style.width = "100%";
+            transferTitle.textContent = "Rejected";
+            transferStatus.textContent = targetDevice.name + " declined the files.";
+            fadeOutPanel();
+          } else if (res.status === "done") {
+            clearInterval(iv);
+            progressBar.style.width = "100%";
+            transferTitle.textContent = "Delivered ✓";
+            transferStatus.textContent = "Sent to " + targetDevice.name + ".";
+            fadeOutPanel();
+          }
+        })
+        .catch(function () {});
+      if (tries > 900) clearInterval(iv); // ~30 min safety stop
+    }, 1000);
+  }
+
+  function fadeOutPanel() {
+    setTimeout(function () { transferPanel.classList.add("hidden"); }, 4000);
   }
 
   // ---------- QR connect modal ----------
