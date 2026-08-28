@@ -19,8 +19,10 @@ app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024 * 1024  # 20 GB safety cap
 
 devices = {}   # id -> {name, type, last_seen}
+offers = {}    # offer_id -> {transfer_id, from_id, from_name, to_id, files, status, created_at}
 
 DEVICE_TIMEOUT = 10       # seconds before a device is considered offline
+OFFER_MAX_AGE = 60 * 60   # 1 hour
 lock = threading.Lock()
 
 
@@ -100,6 +102,46 @@ def upload():
         f.save(os.path.join(dest, name))
         saved.append({"name": name, "size": os.path.getsize(os.path.join(dest, name))})
     return jsonify({"transfer_id": transfer_id, "files": saved})
+
+
+@app.route("/api/offer", methods=["POST"])
+def create_offer():
+    data = request.get_json(force=True)
+    required = ("transfer_id", "to_id", "from_id", "from_name", "files")
+    if not all(k in data for k in required):
+        return jsonify({"error": "missing fields"}), 400
+    offer_id = uuid.uuid4().hex
+    with lock:
+        offers[offer_id] = {
+            "transfer_id": data["transfer_id"],
+            "from_id": data["from_id"],
+            "from_name": data["from_name"][:40],
+            "to_id": data["to_id"],
+            "files": data["files"],
+            "status": "pending",
+            "created_at": time.time(),
+        }
+    return jsonify({"offer_id": offer_id})
+
+
+@app.route("/api/inbox/<device_id>")
+def inbox(device_id):
+    with lock:
+        pending = [
+            {**v, "offer_id": k}
+            for k, v in offers.items()
+            if v["to_id"] == device_id and v["status"] == "pending"
+        ]
+    return jsonify(pending)
+
+
+@app.route("/api/offer/<offer_id>/status")
+def offer_status(offer_id):
+    with lock:
+        o = offers.get(offer_id)
+    if not o:
+        return jsonify({"error": "not found"}), 404
+    return jsonify({"status": o["status"]})
 
 
 if __name__ == "__main__":
