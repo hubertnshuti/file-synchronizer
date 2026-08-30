@@ -7,7 +7,7 @@ import time
 import uuid
 
 import qrcode
-from flask import Flask, jsonify, request, render_template, send_from_directory, send_file
+from flask import Flask, jsonify, request, render_template, send_from_directory, abort, send_file
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
@@ -142,6 +142,57 @@ def offer_status(offer_id):
     if not o:
         return jsonify({"error": "not found"}), 404
     return jsonify({"status": o["status"]})
+
+
+@app.route("/api/offer/<offer_id>/respond", methods=["POST"])
+def respond_offer(offer_id):
+    data = request.get_json(force=True)
+    accept = bool(data.get("accept"))
+    with lock:
+        o = offers.get(offer_id)
+        if not o:
+            return jsonify({"error": "not found"}), 404
+        o["status"] = "accepted" if accept else "rejected"
+        transfer_id = o["transfer_id"]
+    if not accept:
+        _delete_transfer(transfer_id)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/offer/<offer_id>/complete", methods=["POST"])
+def complete_offer(offer_id):
+    with lock:
+        o = offers.get(offer_id)
+        if not o:
+            return jsonify({"error": "not found"}), 404
+        o["status"] = "done"
+        transfer_id = o["transfer_id"]
+    _delete_transfer(transfer_id)
+    return jsonify({"ok": True})
+
+
+def _delete_transfer(transfer_id):
+    dest = os.path.join(UPLOAD_DIR, transfer_id)
+    if os.path.isdir(dest):
+        for root, dirs, files in os.walk(dest, topdown=False):
+            for f in files:
+                try:
+                    os.remove(os.path.join(root, f))
+                except OSError:
+                    pass
+            try:
+                os.rmdir(root)
+            except OSError:
+                pass
+
+
+@app.route("/download/<transfer_id>/<path:filename>")
+def download(transfer_id, filename):
+    dest = os.path.join(UPLOAD_DIR, transfer_id)
+    filename = safe_filename(filename)
+    if not os.path.isfile(os.path.join(dest, filename)):
+        abort(404)
+    return send_from_directory(dest, filename, as_attachment=True)
 
 
 if __name__ == "__main__":
