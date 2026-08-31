@@ -246,6 +246,112 @@
     setTimeout(function () { transferPanel.classList.add("hidden"); }, 4000);
   }
 
+  // ---------- receiving files ----------
+  var offerModal = document.getElementById("offerModal");
+  var offerTitle = document.getElementById("offerTitle");
+  var offerFiles = document.getElementById("offerFiles");
+  var acceptBtn = document.getElementById("acceptBtn");
+  var rejectBtn = document.getElementById("rejectBtn");
+  var shownOffers = {};
+  var currentOffer = null;
+
+  function pollInbox() {
+    if (currentOffer) return; // one at a time
+    fetch("/api/inbox/" + encodeURIComponent(myId))
+      .then(function (r) { return r.json(); })
+      .then(function (list) {
+        for (var i = 0; i < list.length; i++) {
+          var o = list[i];
+          if (!shownOffers[o.offer_id]) {
+            shownOffers[o.offer_id] = true;
+            showOffer(o);
+            break;
+          }
+        }
+      })
+      .catch(function () {});
+  }
+  setInterval(pollInbox, 1200);
+
+  function showOffer(offer) {
+    currentOffer = offer;
+    offerTitle.textContent = offer.from_name + " wants to send:";
+    offerFiles.innerHTML = "";
+    offer.files.forEach(function (f) {
+      var row = document.createElement("div");
+      row.className = "file-row";
+      row.innerHTML =
+        '<span class="fname">' + fileIcon(f.name) + " " + escapeHtml(f.name) + "</span>" +
+        '<span class="fsize">' + formatBytes(f.size) + "</span>";
+      offerFiles.appendChild(row);
+    });
+    offerModal.classList.remove("hidden");
+  }
+
+  function fileIcon(name) {
+    var ext = (name.split(".").pop() || "").toLowerCase();
+    if (["jpg", "jpeg", "png", "gif", "webp", "heic"].indexOf(ext) !== -1) return "🖼️";
+    if (["mp4", "mov", "avi", "mkv"].indexOf(ext) !== -1) return "🎬";
+    if (["mp3", "wav", "m4a"].indexOf(ext) !== -1) return "🎵";
+    if (["pdf"].indexOf(ext) !== -1) return "📄";
+    if (["zip", "rar", "7z"].indexOf(ext) !== -1) return "🗜️";
+    return "📎";
+  }
+
+  rejectBtn.addEventListener("click", function () {
+    if (!currentOffer) return;
+    fetch("/api/offer/" + currentOffer.offer_id + "/respond", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ accept: false }),
+    }).finally(function () {
+      offerModal.classList.add("hidden");
+      currentOffer = null;
+    });
+  });
+
+  acceptBtn.addEventListener("click", function () {
+    if (!currentOffer) return;
+    var offer = currentOffer;
+    fetch("/api/offer/" + offer.offer_id + "/respond", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ accept: true }),
+    })
+      .then(function () {
+        offerModal.classList.add("hidden");
+        downloadOfferFiles(offer);
+        currentOffer = null;
+      })
+      .catch(function () { currentOffer = null; });
+  });
+
+  function downloadOfferFiles(offer) {
+    transferPanel.classList.remove("hidden");
+    transferTitle.textContent = "Receiving from " + offer.from_name + "…";
+    transferStatus.textContent = "Downloading " + offer.files.length + " file(s)…";
+    progressBar.style.width = "60%";
+
+    offer.files.forEach(function (f, idx) {
+      setTimeout(function () {
+        var a = document.createElement("a");
+        a.href = "/download/" + offer.transfer_id + "/" + encodeURIComponent(f.name);
+        a.download = f.name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }, idx * 400);
+    });
+
+    setTimeout(function () {
+      progressBar.style.width = "100%";
+      transferTitle.textContent = "Received ✓";
+      transferStatus.textContent = "Saved to your downloads.";
+      fadeOutPanel();
+      fetch("/api/offer/" + offer.offer_id + "/complete", { method: "POST" }).catch(function () {});
+    }, offer.files.length * 400 + 600);
+  }
+
   // ---------- QR connect modal ----------
   document.getElementById("connectBtn").addEventListener("click", function () {
     document.getElementById("qrModal").classList.remove("hidden");
