@@ -48,6 +48,32 @@ def safe_filename(name):
     return name or "file"
 
 
+def cleanup_loop():
+    while True:
+        time.sleep(300)
+        now = time.time()
+        with lock:
+            stale_devices = [d for d, v in devices.items() if now - v["last_seen"] > 3600]
+            for d in stale_devices:
+                devices.pop(d, None)
+            stale_offers = [o for o, v in offers.items() if now - v["created_at"] > OFFER_MAX_AGE]
+            for o in stale_offers:
+                offers.pop(o, None)
+        for entry in os.listdir(UPLOAD_DIR):
+            path = os.path.join(UPLOAD_DIR, entry)
+            try:
+                if os.path.isdir(path) and now - os.path.getmtime(path) > 1800:
+                    for root, dirs, files in os.walk(path, topdown=False):
+                        for f in files:
+                            os.remove(os.path.join(root, f))
+                        os.rmdir(root)
+            except OSError:
+                pass
+
+
+threading.Thread(target=cleanup_loop, daemon=True).start()
+
+
 @app.route("/")
 def index():
     return render_template("index.html", server_url=SERVER_URL)
